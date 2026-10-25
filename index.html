@@ -65,6 +65,7 @@ h2::before{content:'';width:4px;height:17px;border-radius:3px;background:var(--g
 .tile{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);padding:14px 6px 12px;display:flex;flex-direction:column;align-items:center;gap:8px;font:inherit;font-weight:800;font-size:14px;color:var(--ink);cursor:pointer}
 .tile:active{transform:scale(.97)}
 /* avatars */
+.pan.tap>.li::after{content:'‹';color:#A7B3BF;font-size:26px;line-height:1;margin-inline-start:2px}
 .av{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:17px;flex:none}
 .av .ic{width:21px;height:21px}
 .av.a0,.av.st{background:var(--stbg);color:var(--st)}
@@ -262,9 +263,9 @@ window.addEventListener('popstate',e=>{closeSheet(true);route=(e.state&&e.state.
 let toastFn=null;
 function toast(m,label,fn){const t=$('#toast');toastFn=fn||null;t.innerHTML='<span>'+esc(m)+'</span>'+(label?'<button class="tb" data-a="toastAct">'+esc(label)+'</button>':'');t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',label?8000:2600);}
 function closeSheet(){$('#sheet').classList.remove('on');$('#sheet').innerHTML='';}
-let curDel=null;
+let curDel=null,curDelMsg='';
 function sheet(title,body,submit,opts){
-  opts=opts||{};curDel=opts.del||null;
+  opts=opts||{};curDel=opts.del||null;curDelMsg=opts.delMsg||'این مورد حذف شود؟';
   const el=$('#sheet');
   el.innerHTML=`<div class="sh"><div class="shh"><b>${title}</b><button type="button" class="x" data-a="close">بستن</button></div><form id="f" autocomplete="off">${body}<div class="row"><button class="btn pri" type="submit">${opts.ok||'ذخیره'}</button>${opts.del?'<button type="button" class="btn dng" data-a="fdel">حذف</button>':''}</div></form></div>`;
   el.classList.add('on');
@@ -305,15 +306,25 @@ function editRec(lp){
   if(lp.col==='people')return fPerson(rec);
 }
 /* ---------- forms ---------- */
+function ordCounts(o){const n=live(S.tx).filter(t=>t.oid===o.id).length;return n;}
+function cascadeDeleteOrder(o){
+  o.del=true;put('ord',o);live(S.tx).filter(t=>t.oid===o.id).forEach(t=>{t.del=true;put('tx',t);});
+  logit('حذف سفارش «'+o.title+'» و تراکنش‌های آن');lastPut=null;
+}
+function cascadeDeleteCustomer(c){
+  const os=live(S.ord).filter(o=>o.cid===c.id);
+  os.forEach(o=>cascadeDeleteOrder(o));
+  c.del=true;put('cust',c);logit('حذف مشتری «'+c.name+'»');lastPut=null;
+}
+const custDelMsg=c=>{const os=live(S.ord).filter(o=>o.cid===c.id),n=os.reduce((a,o)=>a+ordCounts(o),0);return 'مشتری «'+c.name+'»'+(os.length?' همراه با '+fa(os.length)+' سفارش و '+fa(n)+' دریافتی/هزینهٔ ثبت‌شده برای او':'')+' حذف شود؟ این کار برگشت ندارد.';};
+const ordDelMsg=o=>'سفارش «'+o.title+'» همراه با '+fa(ordCounts(o))+' دریافتی/هزینهٔ آن حذف شود؟';
 function fCust(rec){
   const r=rec||{};
   sheet(rec?'ویرایش مشتری':'مشتری جدید',`<div class="f"><label class="l">نام مشتری</label><input name="name" value="${esc(r.name)}"></div><div class="f"><label class="l">تلفن (اختیاری)</label><input name="phone" inputmode="tel" value="${esc(r.phone)}"></div><div class="f"><label class="l">یادداشت</label><input name="note" value="${esc(r.note)}"></div>`,fd=>{
     const name=(fd.get('name')||'').trim();if(!name)return 'نام مشتری را بنویسید';
     put('cust',{...r,id:r.id||uid(),name,phone:(fd.get('phone')||'').trim(),note:(fd.get('note')||'').trim()});
     logit((rec?'ویرایش':'ثبت')+' مشتری '+name);
-  },rec?{del:()=>{
-    if(live(S.ord).some(o=>o.cid===r.id)){toast('این مشتری سفارش دارد؛ اول سفارش‌ها را حذف کنید');return false;}
-    r.del=true;put('cust',r);logit('حذف مشتری '+r.name);history.back();}}:null);
+  },rec?{delMsg:custDelMsg(r),del:()=>{cascadeDeleteCustomer(r);history.back();}}:null);
 }
 function fOrder(rec,cid){
   const r=rec||{};const cu=S.cust.find(c=>c.id===(r.cid||cid));
@@ -332,9 +343,7 @@ function fOrder(rec,cid){
     if(!rec)o.no=Math.max(0,...S.ord.map(x=>x.no||0))+1;
     put('ord',o);logit((rec?'ویرایش':'ثبت')+' سفارش «'+o.title+'» برای '+name);
     if(!rec){route={v:'ord',id:o.id};history.pushState({r:route},'');}
-  },rec?{del:()=>{
-    r.del=true;put('ord',r);live(S.tx).filter(t=>t.oid===r.id).forEach(t=>{t.del=true;put('tx',t);});
-    logit('حذف سفارش «'+r.title+'» و تراکنش‌های آن');history.go(-1);}}:null);
+  },rec?{delMsg:ordDelMsg(r),del:()=>{cascadeDeleteOrder(r);history.go(-1);}}:null);
 }
 function fItem(oid,idx){
   const o=S.ord.find(x=>x.id===oid);const it=idx>=0?o.items[idx]:{n:'',q:1,p:0};
@@ -424,8 +433,8 @@ function vHome(){
   const stale=!S.set.lastExport||Date.now()-S.set.lastExport>7*864e5;
   let h=S.set.solo?'':settlePlate(c,true);
   const accs=S.set.solo?['a','s']:['a','b','s'];
-  h+=`<div class="grid3" style="grid-template-columns:repeat(${accs.length},1fr)">${accs.map(k=>`<div class="pan"><span class="mut">${esc(accLabel(k))}</span><b>${money(c.H[k])}</b></div>`).join('')}</div>`;
-  h+=`<div class="pan edge ${recv>0?'g':'o'}"><div class="kv"><span>طلب از مشتری‌ها</span><b>${money(recv)}</b></div></div>`;
+  h+=`<div class="grid3" style="grid-template-columns:repeat(${accs.length},1fr)">${accs.map(k=>`<div class="pan tap" data-a="accd" data-id="${k}"><span class="mut">${esc(accLabel(k))}</span><b>${money(c.H[k])}</b></div>`).join('')}</div>`;
+  h+=`<div class="pan edge ${recv>0?'g':'o'} tap" data-a="go" data-v="acct"><div class="kv"><span>طلب از مشتری‌ها</span><b>${money(recv)}</b></div></div>`;
   h+=tiles([['newIn','down','ok','ثبت دریافتی'],['newOut','up','d','ثبت هزینه'],['newOrd','plus','st','سفارش جدید']]);
   if(!od.length&&!live(S.tx).length)h+=`<div class="pan guide"><b>شروع سریع</b><ol><li>«سفارش جدید» را بزنید و اسم مشتری و مبلغ کار را بنویسید.</li><li>هر پولی که گرفتید را با «ثبت دریافتی» وارد کنید.</li><li>هر خریدی که برای کار کردید را با «ثبت هزینه» وارد کنید.</li></ol></div>`;
   h+=`<h2>سررسید طلب‌ها</h2><div class="hint">مشتری‌هایی که قرار است پول بدهند</div>`;
@@ -436,23 +445,30 @@ function vHome(){
 function custTotals(cid){const os=live(S.ord).filter(o=>o.cid===cid);return{os,pr:os.reduce((s,o)=>s+orderPrice(o),0),pd:os.reduce((s,o)=>s+paid(o),0)};}
 function custList(q){
   const list=live(S.cust).filter(c=>!q||c.name.includes(q)).map(c=>({c,t:custTotals(c.id)})).sort((x,y)=>(y.t.pr-y.t.pd)-(x.t.pr-x.t.pd));
-  return list.length?list.map(({c,t})=>{const r=t.pr-t.pd;return `<div class="pan edge ${r>0?'d':'o'} tap" data-a="cust" data-id="${c.id}"><div class="li">${av(c.name)}<div class="t"><b>${esc(c.name)}</b><div class="mut">${fa(t.os.length)} سفارش</div></div><div class="a ${r>0?'deb':'okc'}">${r>0?'مانده '+money(r):'تسویه'}</div></div></div>`;}).join(''):'<div class="empty">مشتری‌ای پیدا نشد</div>';
+  return list.length?list.map(({c,t})=>{const r=t.pr-t.pd;return `<div class="pan edge ${r>0?'d':'o'} tap" data-a="cust" data-id="${c.id}"><div class="li">${av(c.name)}<div class="t"><b>${esc(c.name)}</b><div class="mut">${fa(t.os.length)} سفارش</div></div><div class="a ${r>0?'deb':'okc'}">${r>0?'مانده '+money(r):r<0?'پیش‌دریافت '+money(-r):'تسویه'}</div></div></div>`;}).join(''):'<div class="empty">مشتری‌ای پیدا نشد</div>';
 }
 function vCust(){return `<div class="f"><input id="q" placeholder="جستجوی مشتری" value=""></div><div id="clist">${custList('')}</div><div class="row"><button class="btn pri" data-a="newCust">مشتری جدید</button><button class="btn" data-a="newOrd">سفارش جدید</button></div>`;}
 function vCustD(){
   const c=S.cust.find(x=>x.id===route.id);if(!c||c.del)return '<div class="empty">پیدا نشد</div>';
   const t=custTotals(c.id),r=t.pr-t.pd;
   let h=`<div class="pan edge ${r>0?'d':'o'}"><div class="li"><b style="font-size:17px">${esc(c.name)}</b><button class="btn sm" data-a="editCust" data-id="${c.id}">ویرایش</button></div>${c.phone?`<div><a href="tel:${esc(c.phone)}" style="color:var(--st)">${esc(fa(c.phone))}</a></div>`:''}${c.note?`<div class="mut">${esc(c.note)}</div>`:''}
-  <div class="kv"><span>جمع سفارش‌ها</span><b>${money(t.pr)}</b></div><div class="kv"><span>دریافت‌شده</span><b>${money(t.pd)}</b></div><div class="kv"><span>مانده</span><b class="${r>0?'deb':'okc'}">${money(r)}</b></div></div>`;
-  h+=`<h2>سفارش‌ها</h2>`+(t.os.length?t.os.sort((x,y)=>y.d<x.d?-1:1).map(o=>{const rr=rest(o);return `<div class="pan edge ${rr>0?'d':'o'} tap" data-a="ord" data-id="${o.id}"><div class="li"><div class="t"><b>${esc(o.title)}</b><div class="mut">${jstr(o.d)}</div></div><div class="a">${money(orderPrice(o))}<div class="mut ${rr>0?'deb':'okc'}">${rr>0?'مانده '+money(rr):'تسویه'}</div></div></div></div>`;}).join(''):'<div class="empty">هنوز سفارشی ندارد</div>');
-  return h+`<div class="row"><button class="btn pri" data-a="newOrd" data-cid="${c.id}">سفارش جدید برای ${esc(c.name)}</button></div>`;
+  <div class="kv"><span>جمع سفارش‌ها</span><b>${money(t.pr)}</b></div><div class="kv"><span>دریافت‌شده</span><b>${money(t.pd)}</b></div><div class="kv"><span>${r<0?'پیش‌دریافت':'مانده'}</span><b class="${r>0?'deb':'okc'}">${money(Math.abs(r))}</b></div></div>`;
+  h+=`<h2>سفارش‌ها</h2>`+(t.os.length?t.os.sort((x,y)=>y.d<x.d?-1:1).map(o=>{const rr=rest(o);return `<div class="pan edge ${rr>0?'d':'o'} tap" data-a="ord" data-id="${o.id}"><div class="li"><div class="t"><b>${esc(o.title)}</b><div class="mut">${jstr(o.d)}</div></div><div class="a">${money(orderPrice(o))}<div class="mut ${rr>0?'deb':'okc'}">${rr>0?'مانده '+money(rr):rr<0?'پیش‌دریافت '+money(-rr):'تسویه'}</div></div></div></div>`;}).join(''):'<div class="empty">هنوز سفارشی ندارد</div>');
+  h+=`<div class="row"><button class="btn pri" data-a="newOrd" data-cid="${c.id}">سفارش جدید برای ${esc(c.name)}</button></div>`;
+  const ids=new Set(t.os.map(o=>o.id));
+  const ev=[];t.os.forEach(o=>ev.push({d:o.d,o}));live(S.tx).filter(x=>ids.has(x.oid)).forEach(x=>ev.push({d:x.d,x}));
+  ev.sort((a,b)=>a.d<b.d?1:a.d>b.d?-1:0);
+  h+=`<h2>تاریخچهٔ کارهای ${esc(c.name)}</h2><div class="hint">همهٔ سفارش‌ها، دریافتی‌ها و هزینه‌ها به ترتیب تاریخ. روی هر مورد بزنید تا جزئیاتش باز شود.</div>`;
+  h+=ev.length?ev.map(e=>e.x?txRow(e.x):`<div class="pan edge tap" data-a="ord" data-id="${e.o.id}"><div class="li">${avi('doc','st')}<div class="t"><b>سفارش «${esc(e.o.title)}»</b><div class="mut">${jstr(e.o.d)} · ثبت سفارش</div></div><div class="a">${fmt(orderPrice(e.o))}</div></div></div>`).join(''):'<div class="empty">هنوز چیزی ثبت نشده</div>';
+  h+=`<div class="row"><button class="btn" data-a="editCust" data-id="${c.id}">ویرایش مشتری</button><button class="btn dng" data-a="delCust" data-id="${c.id}">حذف مشتری</button></div>`;
+  return h;
 }
 function txRow(t){
   const sign=t.t==='in'?'+':t.t==='out'?'−':'';
   const o=S.ord.find(x=>x.id===t.oid);
   const title=t.t==='in'?(t.kind==='deposit'?'بیعانه':'دریافتی')+(o?' · '+custOf(o).name:''):t.t==='out'?(t.note||t.cat||'هزینه'):t.t==='settle'?'تسویه: '+nm(t.from)+' به '+nm(t.from==='a'?'b':'a'):'برداشت '+nm(t.who);
   const sub=[jstr(t.d),t.t==='in'?accLabel(t.acc):t.t==='out'?accLabel(t.acc)+(o?' · '+ordLabel(o):''):t.t==='draw'?accLabel(t.acc):'',t.t==='out'&&t.note&&t.cat?t.cat:''].filter(Boolean).join(' · ');
-  return `<div class="pan edge ${t.t==='in'?'o':t.t==='out'?'d':'g'} tap" data-a="edTx" data-id="${t.id}"><div class="li">${avi(t.t==="in"?"down":t.t==="out"?"up":"swap",t.t==="in"?"ok":t.t==="out"?"d":"g")}<div class="t"><b>${esc(title)}</b><div class="mut">${esc(sub)}</div></div><div class="a ${t.t==='in'?'okc':t.t==='out'?'deb':''}">${sign}${fmt(t.a)}</div></div></div>`;
+  return `<div class="pan edge ${t.t==='in'?'o':t.t==='out'?'d':'g'} tap" data-a="txd" data-id="${t.id}"><div class="li">${avi(t.t==="in"?"down":t.t==="out"?"up":"swap",t.t==="in"?"ok":t.t==="out"?"d":"g")}<div class="t"><b>${esc(title)}</b><div class="mut">${esc(sub)}</div></div><div class="a ${t.t==='in'?'okc':t.t==='out'?'deb':''}">${sign}${fmt(t.a)}</div></div></div>`;
 }
 function vTx(){
   const f=route.f||'all';
@@ -468,16 +484,50 @@ function vOrd(){
   <div class="kv"><span>تاریخ سفارش</span><b>${jstr(o.d)}</b></div>
   <div class="kv"><span>مبلغ کل</span><b>${money(pr)}</b></div>
   <div class="kv"><span>دریافت‌شده</span><b class="okc">${money(pd)}</b></div>
-  <div class="kv"><span>مانده</span><b class="${rs>0?'deb':'okc'}">${money(rs)}</b></div>
+  <div class="kv"><span>${rs<0?'پیش‌دریافت (بیشتر از مبلغ سفارش)':'مانده'}</span><b class="${rs>0?'deb':'okc'}">${money(Math.abs(rs))}</b></div>
   ${o.due?`<div class="kv"><span>سررسید</span><b>${jstr(o.due)}${rs>0?' ('+dueLabel(o.due)[0]+')':''}</b></div>`:''}
   <div class="kv"><span>هزینهٔ خرید برای سفارش</span><b>${money(cs)}</b></div>
   <div class="kv"><span>سود این سفارش (قیمت منهای هزینه)</span><b class="${pr-cs>=0?'okc':'deb'}">${money(pr-cs)}</b></div></div>`;
+  if(pr===0)h+=`<div class="pan edge g"><b>مبلغ کل سفارش هنوز وارد نشده</b><div class="mut">تا مبلغ توافق‌شده ثبت نشود، مانده و سود درست حساب نمی‌شود.</div><div class="row"><button class="btn sm gold" data-a="editOrd" data-id="${o.id}">ثبت مبلغ سفارش</button></div></div>`;
   h+=tiles([['newIn','down','ok','دریافتی'],['newOut','up','d','هزینه'],['inv','doc','st','فاکتور']],o.id);
   h+=`<h2>اقلام فاکتور</h2>`;
   h+=o.items&&o.items.length?o.items.map((it,i)=>`<div class="pan tap" data-a="editItem" data-id="${o.id}" data-i="${i}"><div class="li"><div class="t"><b>${esc(it.n)}</b><div class="mut">${fa(it.q)} × ${fmt(it.p)}</div></div><div class="a">${fmt(it.q*it.p)}</div></div></div>`).join(''):'<div class="mut" style="margin:0 2px 8px">اگر قلم‌ها را اضافه کنید، فاکتور ریزتر می‌شود و مبلغ کل خودکار جمع می‌شود.</div>';
   h+=`<div class="row" style="margin:0 0 6px"><button class="btn sm" data-a="addItem" data-id="${o.id}">افزودن قلم</button></div>`;
   h+=`<h2>دریافتی‌ها و هزینه‌ها</h2><div class="hint">برای ویرایش یا حذف، روی هر مورد بزنید</div>`+(txs.length?txs.map(txRow).join(''):'<div class="empty">هنوز چیزی ثبت نشده</div>');
   if(rs>0&&o.due)h+=`<div class="row"><button class="btn" data-a="ics" data-id="${o.id}">افزودن یادآوری به تقویم گوشی</button></div>`;
+  h+=`<div class="row"><button class="btn" data-a="editOrd" data-id="${o.id}">ویرایش سفارش</button><button class="btn dng" data-a="delOrd" data-id="${o.id}">حذف سفارش</button></div>`;
+  return h;
+}
+function vTxd(){
+  const t=S.tx.find(x=>x.id===route.id);
+  if(!t||t.del)return `<div class="empty">این مورد حذف شده یا پیدا نشد</div><div class="row"><button class="btn" data-a="back">بازگشت</button></div>`;
+  const o=S.ord.find(x=>x.id===t.oid),cu=o&&custOf(o);
+  const kind=t.t==='in'?(t.kind==='deposit'?'بیعانه':'دریافتی از مشتری'):t.t==='out'?'هزینه / خرید':t.t==='settle'?'تسویهٔ بین شریک‌ها':'برداشت شخصی';
+  const sign=t.t==='in'?'+':t.t==='out'?'−':'';
+  const col=t.t==='in'?'ok':t.t==='out'?'d':'g';
+  let h=`<div class="pan"><div class="li" style="justify-content:flex-start">${avi(t.t==='in'?'down':t.t==='out'?'up':'swap',col)}<div class="t"><b style="font-size:17px">${kind}</b><div class="mut">${jstr(t.d)}</div></div></div><div style="font-size:26px;font-weight:800;margin:10px 0 4px" class="${t.t==='in'?'okc':t.t==='out'?'deb':''}">${sign}${fmt(t.a)} <span style="font-size:15px">تومان</span></div><div class="mut">${words(t.a)}</div></div>`;
+  h+=`<div class="pan">`;
+  h+=`<div class="kv"><span>تاریخ</span><b>${jstr(t.d)}</b></div>`;
+  if(t.t==='in'||t.t==='out')h+=`<div class="kv"><span>${t.t==='in'?'به کدام حساب آمد':'از کجا پرداخت شد'}</span><b>${esc(accLabel(t.acc))}</b></div>`;
+  if(t.t==='draw')h+=`<div class="kv"><span>برداشت‌کننده</span><b>${esc(nm(t.who))}</b></div><div class="kv"><span>از حساب</span><b>${esc(accLabel(t.acc))}</b></div>`;
+  if(t.t==='settle')h+=`<div class="kv"><span>پرداخت‌کننده</span><b>${esc(nm(t.from))}</b></div><div class="kv"><span>گیرنده</span><b>${esc(nm(t.from==='a'?'b':'a'))}</b></div>`;
+  if(t.t==='out'&&t.cat)h+=`<div class="kv"><span>دسته</span><b>${esc(t.cat)}</b></div>`;
+  if(t.note)h+=`<div class="kv"><span>توضیح</span><b>${esc(t.note)}</b></div>`;
+  if(o)h+=`<div class="kv tap" data-a="ord" data-id="${o.id}"><span>سفارش</span><b style="color:var(--st)">${esc(o.title)}</b></div><div class="kv tap" data-a="cust" data-id="${cu.id}"><span>مشتری</span><b style="color:var(--st)">${esc(cu.name)}</b></div>`;
+  if(t.by)h+=`<div class="kv"><span>ثبت‌کننده</span><b>${esc(nm(t.by))}</b></div>`;
+  if(t.u)h+=`<div class="kv"><span>آخرین ویرایش</span><b>${new Date(t.u).toLocaleDateString('fa-IR')} ${new Date(t.u).toLocaleTimeString('fa-IR',{hour:'2-digit',minute:'2-digit'})}</b></div>`;
+  h+=`</div><div class="row"><button class="btn pri" data-a="editTxForm" data-id="${t.id}">ویرایش</button><button class="btn dng" data-a="delTx" data-id="${t.id}">حذف</button></div>`;
+  return h;
+}
+function vAccd(){
+  const k=route.id,c=calc();if(!['a','b','s'].includes(k)||(S.set.solo&&k==='b'))return '<div class="empty">پیدا نشد</div>';
+  const partner=k==='a'||k==='b';
+  const list=live(S.tx).filter(t=>(t.t==='in'||t.t==='out'||t.t==='draw')&&t.acc===k||(partner&&t.t==='settle')).sort(byDate);
+  const pocket=partner?live(S.tx).filter(t=>t.t==='out'&&t.acc==='p'+k).sort(byDate):[];
+  let h=`<div class="plate"><div class="big">موجودی: ${money(c.H[k])}</div><small>${esc(accLabel(k))} — طبق همهٔ ثبت‌ها</small></div>`;
+  h+=`<div class="pan"><div class="kv"><span>جمع دریافتی‌ها</span><b class="okc">${money(c.inc[k])}</b></div><div class="kv"><span>جمع هزینه‌ها از این حساب</span><b class="deb">${money(c.out[k])}</b></div><div class="kv"><span>برداشت‌های شخصی</span><b>${money(c.dr[k])}</b></div>${partner?`<div class="kv"><span>دریافت/پرداخت تسویه</span><b>${money(c.stn[k])}</b></div><div class="kv"><span>هزینه از جیب شخصی (طلب از کارگاه)</span><b>${money(c.pk[k])}</b></div>`:''}</div>`;
+  h+=`<h2>گردش این حساب</h2><div class="hint">روی هر مورد بزنید تا جزئیات و ویرایشش باز شود.</div>`+(list.length?list.map(txRow).join(''):'<div class="empty">هنوز چیزی ثبت نشده</div>');
+  if(pocket.length)h+=`<h2>هزینه‌هایی که از جیب شخصی داده شده</h2>`+pocket.map(txRow).join('');
   return h;
 }
 function vInv(){
@@ -496,10 +546,10 @@ function vInv(){
 }
 function vAcct(){
   const c=calc();
-  if(S.set.solo)return `<div class="grid3" style="grid-template-columns:repeat(2,1fr)"><div class="pan"><span class="mut">${accLabel('a')}</span><b>${money(c.H.a)}</b></div><div class="pan"><span class="mut">${accLabel('s')}</span><b>${money(c.H.s)}</b></div></div><div class="pan"><div class="kv"><span>جمع دریافتی‌ها</span><b class="okc">${money(c.inc.a+c.inc.s)}</b></div><div class="kv"><span>جمع هزینه‌ها</span><b class="deb">${money(c.out.a+c.out.s)}</b></div></div>`+vReports();
+  if(S.set.solo)return `<div class="grid3" style="grid-template-columns:repeat(2,1fr)"><div class="pan tap" data-a="accd" data-id="a"><span class="mut">${accLabel('a')}</span><b>${money(c.H.a)}</b></div><div class="pan tap" data-a="accd" data-id="s"><span class="mut">${accLabel('s')}</span><b>${money(c.H.s)}</b></div></div><div class="pan"><div class="kv"><span>جمع دریافتی‌ها</span><b class="okc">${money(c.inc.a+c.inc.s)}</b></div><div class="kv"><span>جمع هزینه‌ها</span><b class="deb">${money(c.out.a+c.out.s)}</b></div></div>`+vReports();
   let h=settlePlate(c,false)+`<div class="row" style="margin:0 0 6px"><button class="btn pri" data-a="newSettle">ثبت پرداخت تسویه</button><button class="btn" data-a="newDraw">برداشت شخصی</button></div>`;
-  ['a','b'].forEach(k=>{h+=`<h2>${esc(nm(k))}</h2><div class="pan"><div class="kv"><span>دریافتی به حساب خودش</span><b>${money(c.inc[k])}</b></div><div class="kv"><span>هزینه از حساب خودش</span><b>${money(c.out[k])}</b></div><div class="kv"><span>هزینه از جیب شخصی (طلب از کارگاه)</span><b>${money(c.pk[k])}</b></div><div class="kv"><span>برداشت شخصی</span><b>${money(c.dw[k])}</b></div><div class="kv"><span>دریافت/پرداخت تسویه</span><b>${money(c.stn[k])}</b></div><div class="kv"><span>موجودی حساب (طبق ثبت‌ها)</span><b>${money(c.H[k])}</b></div></div>`;});
-  h+=`<h2>حساب مشترک</h2><div class="pan"><div class="kv"><span>دریافتی</span><b>${money(c.inc.s)}</b></div><div class="kv"><span>هزینه</span><b>${money(c.out.s)}</b></div><div class="kv"><span>موجودی</span><b>${money(c.H.s)}</b></div></div>`;
+  ['a','b'].forEach(k=>{h+=`<h2>${esc(nm(k))}</h2><div class="pan tap" data-a="accd" data-id="${k}"><div class="kv"><span>دریافتی به حساب خودش</span><b>${money(c.inc[k])}</b></div><div class="kv"><span>هزینه از حساب خودش</span><b>${money(c.out[k])}</b></div><div class="kv"><span>هزینه از جیب شخصی (طلب از کارگاه)</span><b>${money(c.pk[k])}</b></div><div class="kv"><span>برداشت شخصی</span><b>${money(c.dw[k])}</b></div><div class="kv"><span>دریافت/پرداخت تسویه</span><b>${money(c.stn[k])}</b></div><div class="kv"><span>موجودی حساب (طبق ثبت‌ها)</span><b>${money(c.H[k])}</b></div></div>`;});
+  h+=`<h2>حساب مشترک</h2><div class="pan tap" data-a="accd" data-id="s"><div class="kv"><span>دریافتی</span><b>${money(c.inc.s)}</b></div><div class="kv"><span>هزینه</span><b>${money(c.out.s)}</b></div><div class="kv"><span>موجودی</span><b>${money(c.H.s)}</b></div></div>`;
   return h+vReports();
 }
 function vReports(){
@@ -517,7 +567,7 @@ function vReports(){
 function vSet(){
   const s0=S.set,t=btype(),shopish=t==='shop'||t==='solo';
   const logs=S.log.slice().sort((x,y)=>y.ts-x.ts).slice(0,60);
-  let h=`<div class="pan"><div class="li" style="justify-content:flex-start"><img src="icon-192.png" alt="" width="54" height="54" style="border-radius:14px"><div><b>حساب کارگاه</b><div class="mut">ساخته‌شده توسط ${CREDIT}</div><div class="mut">نسخهٔ ۴</div></div></div></div>`;
+  let h=`<div class="pan"><div class="li" style="justify-content:flex-start"><img src="icon-192.png" alt="" width="54" height="54" style="border-radius:14px"><div><b>حساب کارگاه</b><div class="mut">ساخته‌شده توسط ${CREDIT}</div><div class="mut">نسخهٔ ۵</div></div></div></div>`;
   if(t==='shop')h+=`<div class="pan"><div class="kv"><span>شریک اول</span><b>${esc(s0.nameA)}</b></div><div class="kv"><span>شریک دوم</span><b>${esc(s0.nameB)}</b></div><div class="kv"><span>این گوشی</span><b>${esc(nm(s0.who))}</b></div><div class="row"><button class="btn sm" data-a="setup">تغییر نام‌ها / این گوشی</button></div></div>`;
   if(shopish)h+=`<div class="pan"><form id="sf"><div class="f"><label class="l">نام روی فاکتور</label><input name="shop" value="${esc(s0.shop)}" placeholder="${esc(cur().name)}"></div><div class="f"><label class="l">تلفن (روی فاکتور)</label><input name="phone" inputmode="tel" value="${esc(s0.phone)}"></div>${t==='shop'?`<div class="f"><label class="l">سهم ${esc(s0.nameA)} از شراکت (درصد)</label><input name="share" inputmode="numeric" value="${fa(s0.share)}"></div>`:''}<button class="btn pri" style="width:100%">ذخیرهٔ تنظیمات</button></form></div>`;
   h+=`<div class="pan"><div class="li"><span>دفتر فعلی: <b>${esc(cur().name)}</b></span><button class="btn sm" data-a="go" data-v="books">دفترها</button></div><div class="row"><button class="btn sm" data-a="bookMenu" data-id="${cur().id}">ویرایش دفتر</button></div></div>`;
@@ -529,10 +579,10 @@ function vSet(){
 }
 
 /* ---------- render ---------- */
-const TITLES={home:'حساب کارگاه',cust:'مشتری‌ها',custd:'مشتری',ord:'سفارش',tx:'تراکنش‌ها',acct:'تسویه و گزارش',set:'تنظیمات',inv:'فاکتور',books:'دفترها',texp:'خرج‌ها',tppl:'نفرات',tset:'تسویه',phome:'خانه',ptx:'تراکنش‌ها',pdebt:'وام و بدهی',pdebtd:'جزئیات'};
-const VIEWS={home:vHome,cust:vCust,custd:vCustD,ord:vOrd,tx:vTx,acct:vAcct,set:vSet,inv:vInv,books:vBooks,texp:vTExp,tppl:vTPpl,tset:vTSet,phome:vPHome,ptx:vPTx,pdebt:vPDebt,pdebtd:vPDebtD};
-const SUBS=['custd','ord','inv','set','books','pdebtd'];
-const SUB_OK={custd:['shop','solo'],ord:['shop','solo'],inv:['shop','solo'],pdebtd:['personal']};
+const TITLES={home:'حساب کارگاه',cust:'مشتری‌ها',custd:'مشتری',ord:'سفارش',tx:'تراکنش‌ها',acct:'تسویه و گزارش',set:'تنظیمات',inv:'فاکتور',books:'دفترها',texp:'خرج‌ها',tppl:'نفرات',tset:'تسویه',phome:'خانه',ptx:'تراکنش‌ها',pdebt:'وام و بدهی',pdebtd:'جزئیات',txd:'جزئیات تراکنش',accd:'جزئیات حساب'};
+const VIEWS={home:vHome,cust:vCust,custd:vCustD,ord:vOrd,tx:vTx,acct:vAcct,set:vSet,inv:vInv,books:vBooks,texp:vTExp,tppl:vTPpl,tset:vTSet,phome:vPHome,ptx:vPTx,pdebt:vPDebt,pdebtd:vPDebtD,txd:vTxd,accd:vAccd};
+const SUBS=['custd','ord','inv','set','books','pdebtd','txd','accd'];
+const SUB_OK={custd:['shop','solo'],ord:['shop','solo'],inv:['shop','solo'],pdebtd:['personal'],txd:['shop','solo'],accd:['shop','solo']};
 const homeOf=()=>TYPES[btype()].home;
 function tabsOf(){const t=btype();return({shop:[['home','خانه','home'],['cust','مشتری‌ها','users'],['tx','تراکنش‌ها','list'],['acct','تسویه و گزارش','scale']],solo:[['home','خانه','home'],['cust','مشتری‌ها','users'],['tx','تراکنش‌ها','list'],['acct','گزارش','chart']],trip:[['texp','خرج‌ها','receipt'],['tppl','نفرات','users'],['tset','تسویه','scale']],personal:[['phome','خانه','wallet'],['ptx','تراکنش‌ها','list'],['pdebt','وام و بدهی','bank']]})[t];}
 function crumbs(){
@@ -541,6 +591,8 @@ function crumbs(){
   if(v===home){}
   else if(v==='custd'){const c=S.cust.find(x=>x.id===route.id);t.push({l:T('cust'),v:'cust'},{l:c?c.name:''});}
   else if(v==='ord'||v==='inv'){const o=S.ord.find(x=>x.id===route.id);if(o){t.push({l:T('cust'),v:'cust'},{l:custOf(o).name,v:'custd',id:o.cid});if(v==='ord')t.push({l:o.title});else t.push({l:o.title,v:'ord',id:o.id},{l:'فاکتور'});}}
+  else if(v==='txd'){t.push({l:T('tx'),v:'tx'},{l:'جزئیات'});}
+  else if(v==='accd'){t.push({l:route.id?accLabel(route.id):''});}
   else if(v==='pdebtd'){const x=S.debts.find(q=>q.id===route.id);t.push({l:T('pdebt'),v:'pdebt'},{l:x?x.name:''});}
   else t.push({l:T(v)});
   return t;
@@ -551,7 +603,7 @@ function render(){
   const sub=SUBS.includes(v);
   if((sub&&SUB_OK[v]&&!SUB_OK[v].includes(btype()))||(!sub&&!tabs.some(x=>x[0]===v))||!VIEWS[v]){route={v:homeOf()};v=route.v;}
   const isSub=SUBS.includes(v),isHome=v===homeOf();
-  const tab=['custd','ord','inv'].includes(v)?'cust':v==='pdebtd'?'pdebt':v;
+  const tab=['custd','ord','inv'].includes(v)?'cust':v==='txd'?'tx':v==='accd'?'acct':v==='pdebtd'?'pdebt':v;
   const title=isHome?cur().name:(v==='custd'||v==='ord'||v==='inv'||v==='pdebtd')?TITLES[v]:TITLES[v];
   const cr=crumbs();
   const crh=cr.map((c,i)=>{const last=i===cr.length-1;const inner=(c.i?ic(c.i):'')+esc(c.l);return (i?'<span class="sep">‹</span>':'')+(last?`<span class="cur">${esc(c.l)}</span>`:`<a data-a="crumb" data-v="${c.v}" ${c.id?`data-id="${c.id}"`:''}>${inner}</a>`);}).join('');
@@ -624,7 +676,7 @@ async function notifyDue(force){
 }
 const A={
   close:()=>{closeSheet();},
-  fdel:()=>{const d=curDel;if(!d)return;ask('این مورد حذف شود؟',()=>{const r=d();if(r!==false)render();});},
+  fdel:()=>{const d=curDel,m=curDelMsg;if(!d)return;ask(m,()=>{const r=d();if(r!==false)render();});},
   askYes:()=>{const f=askCb;askCb=null;closeSheet();if(f)f();},toastAct:()=>{const f=toastFn;toastFn=null;$('#toast').style.display='none';if(f)f();},
   go:d=>go(d.v),back:()=>history.back(),
   plus:plusMenu,
@@ -898,6 +950,10 @@ function vPDebtD(){
 
 /* ======================= actions (دفترها / سفر / شخصی) ======================= */
 Object.assign(A,{
+  txd:d=>go('txd',{id:d.id}),accd:d=>go('accd',{id:d.id}),editTxForm:d=>editTx(d.id),
+  delTx:d=>{const t=S.tx.find(x=>x.id===d.id);if(!t)return;ask('این مورد حذف شود؟',()=>{t.del=true;put('tx',t);logit('حذف '+(t.t==='in'?'دریافتی ':t.t==='out'?'هزینه ':'تراکنش ')+fmt(t.a));lastPut=null;history.back();});},
+  delCust:d=>{const c=S.cust.find(x=>x.id===d.id);if(!c)return;ask(custDelMsg(c),()=>{cascadeDeleteCustomer(c);history.back();});},
+  delOrd:d=>{const o=S.ord.find(x=>x.id===d.id);if(!o)return;ask(ordDelMsg(o),()=>{cascadeDeleteOrder(o);history.back();});},
   crumb:d=>go(d.v,d.id?{id:d.id}:undefined),home:()=>go(homeOf()),tpayq:()=>fTPay(),
   openBook:d=>switchTo(d.id),newBook:()=>{closeSheet();fBook();},renBook:d=>renBook(d.id),pinBook:d=>pinBook(d.id),resetBook:d=>resetBook(d.id),delBook:d=>delBook(d.id),bookMenu:d=>bookMenu(d.id),
   addPeople:()=>fPeople(),edPerson:d=>fPerson(S.people.find(x=>x.id===d.id)),
