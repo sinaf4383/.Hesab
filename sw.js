@@ -1,5 +1,5 @@
 // برای به‌روزرسانی اپ بعد از تغییر فایل‌ها، شمارهٔ نسخه را عوض کنید
-const CACHE = 'kargah-v1';
+const CACHE = 'kargah-v2';
 const FILES = ['./', './index.html', './manifest.json', './icon.svg', './icon-180.png', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).catch(() => {}));
