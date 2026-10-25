@@ -117,7 +117,8 @@ nav a.on{color:var(--st);font-weight:800}
 nav a.on .ic{background:var(--stbg)}
 .fab{position:fixed;left:16px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:10;width:58px;height:58px;border-radius:50%;border:0;background:var(--gold);color:#2b2108;display:grid;place-items:center;box-shadow:0 6px 16px rgba(160,110,10,.4);cursor:pointer}
 .fab .ic{width:28px;height:28px;stroke-width:2.6}
-#toast{position:fixed;top:78px;left:50%;transform:translateX(-50%);background:var(--plate);color:#fff;padding:10px 18px;border-radius:12px;z-index:30;display:none;max-width:90%;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.3)}
+#toast{position:fixed;bottom:calc(96px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:var(--plate);color:#fff;padding:10px 18px;border-radius:12px;z-index:30;display:none;max-width:90%;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.3)}
+#toast .tb{background:var(--gold);color:#2b2108;border:0;border-radius:9px;padding:4px 14px;font:inherit;font-weight:800;margin-inline-start:12px;cursor:pointer}
 .credit{text-align:center;color:var(--mut);font-size:12.5px;margin:26px 0 4px}
 .credit b{color:var(--ink)}
 .guide ol{padding-right:20px;margin-top:6px}
@@ -222,7 +223,8 @@ const btype=()=>cur()?cur().type:'shop';
 const save=()=>{try{localStorage.setItem(KEY2,JSON.stringify(R));}catch(e){toast('ذخیره‌سازی ناموفق بود');}};
 function useBook(id){R.cur=id;S=cur().d;save();}
 const live=a=>a.filter(x=>!x.del);
-function put(col,rec){rec.u=Date.now();const i=S[col].findIndex(x=>x.id===rec.id);if(i<0)S[col].push(rec);else S[col][i]=rec;save();}
+let lastPut=null;
+function put(col,rec){rec.u=Date.now();const i=S[col].findIndex(x=>x.id===rec.id);if(i<0)S[col].push(rec);else S[col][i]=rec;save();lastPut=rec.del?null:{col,id:rec.id};}
 function logit(text){S.log.push({id:uid(),ts:Date.now(),by:S.set.who,text});save();}
 const nm=k=>k==='a'?(S.set.nameA||'من'):(S.set.nameB||'شریک');
 const accLabel=k=>S.set.solo?({a:'حساب بانکی',s:'صندوق / نقد'})[k]||k:({a:'حساب '+S.set.nameA,b:'حساب '+S.set.nameB,s:'حساب مشترک',pa:'جیب شخصی '+S.set.nameA,pb:'جیب شخصی '+S.set.nameB})[k]||k;
@@ -257,7 +259,8 @@ function settleText(c){
 let route={v:'home'};
 function go(v,p){route=Object.assign({v},p||{});history.pushState({r:route},'');render();window.scrollTo(0,0);}
 window.addEventListener('popstate',e=>{closeSheet(true);route=(e.state&&e.state.r)||{v:'home'};render();});
-function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',2600);}
+let toastFn=null;
+function toast(m,label,fn){const t=$('#toast');toastFn=fn||null;t.innerHTML='<span>'+esc(m)+'</span>'+(label?'<button class="tb" data-a="toastAct">'+esc(label)+'</button>':'');t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',label?8000:2600);}
 function closeSheet(){$('#sheet').classList.remove('on');$('#sheet').innerHTML='';}
 let curDel=null;
 function sheet(title,body,submit,opts){
@@ -266,7 +269,7 @@ function sheet(title,body,submit,opts){
   el.innerHTML=`<div class="sh"><div class="shh"><b>${title}</b><button type="button" class="x" data-a="close">بستن</button></div><form id="f" autocomplete="off">${body}<div class="row"><button class="btn pri" type="submit">${opts.ok||'ذخیره'}</button>${opts.del?'<button type="button" class="btn dng" data-a="fdel">حذف</button>':''}</div></form></div>`;
   el.classList.add('on');
   const f=$('#f');
-  f.onsubmit=e=>{e.preventDefault();const err=submit(new FormData(f));if(err)toast(err);else{closeSheet();render();}};
+  f.onsubmit=e=>{e.preventDefault();lastPut=null;const err=submit(new FormData(f));if(err)toast(err);else{closeSheet();render();if(lastPut){const lp=lastPut;lastPut=null;toast('ذخیره شد','ویرایش',()=>editRec(lp));}}};
   const first=f.querySelector('input:not([type=hidden]):not([type=radio]),select');
 }
 document.addEventListener('input',e=>{
@@ -276,6 +279,31 @@ const optsHtml=(list,sel)=>list.map(([v,l])=>`<option value="${esc(v)}" ${v===se
 const accOpts=(sel,pocket)=>optsHtml((S.set.solo?[['a',accLabel('a')],['s',accLabel('s')]]:[['a',accLabel('a')],['b',accLabel('b')],['s',accLabel('s')]]).concat(pocket&&!S.set.solo?[['pa',accLabel('pa')],['pb',accLabel('pb')]]:[]),sel);
 const ordOpts=(sel,none)=>optsHtml((none?[['',none]]:[]).concat(live(S.ord).sort((x,y)=>y.u-x.u).map(o=>[o.id,ordLabel(o)])),sel||'');
 
+/* ---------- in-app dialogs (confirm/prompt do not work in installed apps) ---------- */
+let askCb=null;
+function ask(msg,cb,title){
+  askCb=cb;const el=$('#sheet');
+  el.innerHTML=`<div class="sh"><div class="shh"><b>${esc(title||'مطمئنید؟')}</b></div><p style="margin-bottom:14px">${esc(msg)}</p><div class="row"><button type="button" class="btn dng" data-a="askYes">بله</button><button type="button" class="btn" data-a="close">خیر</button></div></div>`;
+  el.classList.add('on');
+}
+function askWord(msg,cb){
+  sheet('تأیید نهایی',`<p style="margin-bottom:12px">${esc(msg)}</p><div class="f"><label class="l">برای تأیید، کلمهٔ «پاک» را بنویسید</label><input name="w" autocomplete="off"></div>`,fd=>{
+    if((fd.get('w')||'').trim()!=='پاک')return 'کلمه را درست بنویسید';
+    cb();
+  },{ok:'تأیید و پاک کردن'});
+}
+function editRec(lp){
+  const rec=lp&&S[lp.col]&&S[lp.col].find(x=>x.id===lp.id);
+  if(lp&&lp.col==='debtpay')return go('pdebtd',{id:lp.id});
+  if(!rec||rec.del)return;
+  const t=btype();
+  if(lp.col==='tx')return t==='personal'?fPTx(null,rec):editTx(rec.id);
+  if(lp.col==='ord')return fOrder(rec);
+  if(lp.col==='cust')return fCust(rec);
+  if(lp.col==='exp')return A.edExp({id:rec.id});
+  if(lp.col==='debts')return fDebt(rec);
+  if(lp.col==='people')return fPerson(rec);
+}
 /* ---------- forms ---------- */
 function fCust(rec){
   const r=rec||{};
@@ -315,7 +343,7 @@ function fItem(oid,idx){
     if(!n||!p)return 'شرح و قیمت را وارد کنید';
     o.items=o.items||[];const rec={n,q,p};
     if(idx>=0)o.items[idx]=rec;else o.items.push(rec);
-    o.price=orderPrice(o);put('ord',o);logit('قلم «'+n+'» در سفارش «'+o.title+'»');
+    o.price=orderPrice(o);put('ord',o);logit('قلم «'+n+'» در سفارش «'+o.title+'»');lastPut=null;
   },idx>=0?{del:()=>{o.items.splice(idx,1);o.price=orderPrice(o);put('ord',o);logit('حذف یک قلم از سفارش «'+o.title+'»');}}:null);
 }
 function fIn(oid,rec){
@@ -430,7 +458,7 @@ function vTx(){
   const f=route.f||'all';
   const list=live(S.tx).filter(t=>f==='all'||(f==='in'&&t.t==='in')||(f==='out'&&t.t==='out')||(f==='p'&&(t.t==='settle'||t.t==='draw'))).sort(byDate).slice(0,250);
   const chip=(k,l)=>`<a class="${f===k?'on':''}" data-a="filt" data-f="${k}">${l}</a>`;
-  return `<div class="chips">${chip('all','همه')}${chip('in','دریافتی')}${chip('out','هزینه')}${chip('p','شریکی')}</div>`+(list.length?list.map(txRow).join(''):'<div class="empty">تراکنشی ثبت نشده است. با دکمهٔ + شروع کنید.</div>');
+  return `<div class="chips">${chip('all','همه')}${chip('in','دریافتی')}${chip('out','هزینه')}${chip('p','شریکی')}</div><div class="hint">برای ویرایش یا حذف، روی هر مورد بزنید</div>`+(list.length?list.map(txRow).join(''):'<div class="empty">تراکنشی ثبت نشده است. با دکمهٔ + شروع کنید.</div>');
 }
 function vOrd(){
   const o=S.ord.find(x=>x.id===route.id);if(!o||o.del)return '<div class="empty">پیدا نشد</div>';
@@ -448,7 +476,7 @@ function vOrd(){
   h+=`<h2>اقلام فاکتور</h2>`;
   h+=o.items&&o.items.length?o.items.map((it,i)=>`<div class="pan tap" data-a="editItem" data-id="${o.id}" data-i="${i}"><div class="li"><div class="t"><b>${esc(it.n)}</b><div class="mut">${fa(it.q)} × ${fmt(it.p)}</div></div><div class="a">${fmt(it.q*it.p)}</div></div></div>`).join(''):'<div class="mut" style="margin:0 2px 8px">اگر قلم‌ها را اضافه کنید، فاکتور ریزتر می‌شود و مبلغ کل خودکار جمع می‌شود.</div>';
   h+=`<div class="row" style="margin:0 0 6px"><button class="btn sm" data-a="addItem" data-id="${o.id}">افزودن قلم</button></div>`;
-  h+=`<h2>دریافتی‌ها و هزینه‌ها</h2>`+(txs.length?txs.map(txRow).join(''):'<div class="empty">هنوز چیزی ثبت نشده</div>');
+  h+=`<h2>دریافتی‌ها و هزینه‌ها</h2><div class="hint">برای ویرایش یا حذف، روی هر مورد بزنید</div>`+(txs.length?txs.map(txRow).join(''):'<div class="empty">هنوز چیزی ثبت نشده</div>');
   if(rs>0&&o.due)h+=`<div class="row"><button class="btn" data-a="ics" data-id="${o.id}">افزودن یادآوری به تقویم گوشی</button></div>`;
   return h;
 }
@@ -489,10 +517,10 @@ function vReports(){
 function vSet(){
   const s0=S.set,t=btype(),shopish=t==='shop'||t==='solo';
   const logs=S.log.slice().sort((x,y)=>y.ts-x.ts).slice(0,60);
-  let h=`<div class="pan"><div class="li" style="justify-content:flex-start"><img src="icon-192.png" alt="" width="54" height="54" style="border-radius:14px"><div><b>حساب کارگاه</b><div class="mut">ساخته‌شده توسط ${CREDIT}</div><div class="mut">نسخهٔ ۳</div></div></div></div>`;
+  let h=`<div class="pan"><div class="li" style="justify-content:flex-start"><img src="icon-192.png" alt="" width="54" height="54" style="border-radius:14px"><div><b>حساب کارگاه</b><div class="mut">ساخته‌شده توسط ${CREDIT}</div><div class="mut">نسخهٔ ۴</div></div></div></div>`;
   if(t==='shop')h+=`<div class="pan"><div class="kv"><span>شریک اول</span><b>${esc(s0.nameA)}</b></div><div class="kv"><span>شریک دوم</span><b>${esc(s0.nameB)}</b></div><div class="kv"><span>این گوشی</span><b>${esc(nm(s0.who))}</b></div><div class="row"><button class="btn sm" data-a="setup">تغییر نام‌ها / این گوشی</button></div></div>`;
   if(shopish)h+=`<div class="pan"><form id="sf"><div class="f"><label class="l">نام روی فاکتور</label><input name="shop" value="${esc(s0.shop)}" placeholder="${esc(cur().name)}"></div><div class="f"><label class="l">تلفن (روی فاکتور)</label><input name="phone" inputmode="tel" value="${esc(s0.phone)}"></div>${t==='shop'?`<div class="f"><label class="l">سهم ${esc(s0.nameA)} از شراکت (درصد)</label><input name="share" inputmode="numeric" value="${fa(s0.share)}"></div>`:''}<button class="btn pri" style="width:100%">ذخیرهٔ تنظیمات</button></form></div>`;
-  h+=`<div class="pan"><div class="li"><span>دفتر فعلی: <b>${esc(cur().name)}</b></span><button class="btn sm" data-a="go" data-v="books">دفترها</button></div></div>`;
+  h+=`<div class="pan"><div class="li"><span>دفتر فعلی: <b>${esc(cur().name)}</b></span><button class="btn sm" data-a="go" data-v="books">دفترها</button></div><div class="row"><button class="btn sm" data-a="bookMenu" data-id="${cur().id}">ویرایش دفتر</button></div></div>`;
   h+=`<h2>پشتیبان${t==='shop'||t==='trip'?' و هماهنگی دو گوشی':''}</h2><div class="pan"><div class="mut" style="margin-bottom:8px">«خروجی پشتیبان» فقط همین دفتر را ذخیره می‌کند. ${t==='shop'||t==='trip'?'برای هماهنگی، فایل را در بله/ایتا/تلگرام برای طرف مقابل بفرستید و او «ورود پشتیبان» بزند؛ اطلاعات بدون تکرار ادغام می‌شود.':'پشتیبان را جای امنی نگه دارید تا با عوض شدن گوشی اطلاعات از بین نرود.'}</div><div class="row"><button class="btn pri" data-a="export">خروجی پشتیبان</button><button class="btn" data-a="import">ورود پشتیبان</button></div>
   <div class="mut" style="margin-top:8px">آخرین خروجی: ${s0.lastExport?new Date(s0.lastExport).toLocaleDateString('fa-IR'):'هرگز'}</div></div>`;
   if(shopish)h+=`<h2>یادآوری سررسید</h2><div class="pan"><div class="mut" style="margin-bottom:8px">هر بار برنامه را باز کنید، سررسیدهای امروز و گذشته اعلام می‌شود. برای اطمینان بیشتر در صفحهٔ هر سفارش «افزودن یادآوری به تقویم گوشی» را بزنید.</div><div class="row"><button class="btn" data-a="notif">فعال‌سازی اعلان</button></div></div>`;
@@ -596,7 +624,8 @@ async function notifyDue(force){
 }
 const A={
   close:()=>{closeSheet();},
-  fdel:()=>{if(curDel&&confirm('حذف شود؟')){const r=curDel();if(r!==false){closeSheet();render();}}},
+  fdel:()=>{const d=curDel;if(!d)return;ask('این مورد حذف شود؟',()=>{const r=d();if(r!==false)render();});},
+  askYes:()=>{const f=askCb;askCb=null;closeSheet();if(f)f();},toastAct:()=>{const f=toastFn;toastFn=null;$('#toast').style.display='none';if(f)f();},
   go:d=>go(d.v),back:()=>history.back(),
   plus:plusMenu,
   newIn:d=>{closeSheet();fIn(d.id);},newOut:d=>{closeSheet();fOut(d.id);},
@@ -607,7 +636,7 @@ const A={
   addItem:d=>fItem(d.id,-1),editItem:d=>fItem(d.id,+d.i),
   edTx:d=>editTx(d.id),filt:d=>{route.f=d.f;render();},
   inv:d=>go('inv',{id:d.id}),print:()=>window.print(),
-  shareInv:async d=>{const o=S.ord.find(x=>x.id===d.id),t=invText(o);try{if(navigator.share){await navigator.share({text:t});return;}}catch(e){if(e&&e.name==='AbortError')return;}try{await navigator.clipboard.writeText(t);toast('متن فاکتور کپی شد');}catch(e){prompt('متن فاکتور:',t);}},
+  shareInv:async d=>{const o=S.ord.find(x=>x.id===d.id),t=invText(o);try{if(navigator.share){await navigator.share({text:t});return;}}catch(e){if(e&&e.name==='AbortError')return;}try{await navigator.clipboard.writeText(t);toast('متن فاکتور کپی شد');}catch(e){sheet('متن فاکتور (نگه دارید و کپی کنید)',`<textarea rows="10" readonly>${esc(t)}</textarea>`,()=>{},{ok:'بستن'});}},
   ics:d=>icsFile(S.ord.find(x=>x.id===d.id)),
   export:doExport,import:()=>$('#file').click(),notif:askNotif,setup:fSetup
 };
@@ -640,32 +669,45 @@ function fBook(first){
   if(first)$('.x').style.display='none';
 }
 function vBooks(){
-  let h=R.books.map(b=>`<div class="pan edge ${b.id===R.cur?'':'g'} tap" data-a="openBook" data-id="${b.id}"><div class="li">${avi('book',b.id===R.cur?'ok':'st')}<div class="t"><b>${esc(b.name)}${b.pin?' (رمزدار)':''}</b><div class="mut">${TYPES[b.type].label}</div></div>${b.id===R.cur?'<span class="okc">فعال</span>':''}</div></div>`).join('');
+  let h=R.books.map(b=>`<div class="pan edge ${b.id===R.cur?'':'g'} tap" data-a="openBook" data-id="${b.id}"><div class="li">${avi('book',b.id===R.cur?'ok':'st')}<div class="t"><b>${esc(b.name)}${b.pin?' (رمزدار)':''}</b><div class="mut">${TYPES[b.type].label}</div></div>${b.id===R.cur?'<span class="okc">فعال</span>':''}</div><div class="row" style="margin-top:10px"><button class="btn sm" data-a="bookMenu" data-id="${b.id}">ویرایش دفتر (نام، رمز، پاک کردن، حذف)</button></div></div>`).join('');
   h+=`<div class="row"><button class="btn pri" data-a="newBook">دفتر جدید</button></div>`;
-  h+=`<h2>دفتر فعلی: ${esc(cur().name)}</h2><div class="pan"><div class="row" style="margin:0"><button class="btn sm" data-a="renBook">تغییر نام</button><button class="btn sm" data-a="pinBook">${cur().pin?'تغییر / حذف رمز':'گذاشتن رمز'}</button></div><div class="row"><button class="btn sm dng" data-a="resetBook">پاک کردن اطلاعات این دفتر</button><button class="btn sm dng" data-a="delBook">حذف دفتر</button></div><div class="mut" style="margin-top:8px">هر دفتر اطلاعات جداگانه دارد و پاک کردن یکی روی بقیه اثری ندارد. رمز فقط جلوی باز کردن اتفاقی را می‌گیرد. پیش از پاک کردن، «خروجی پشتیبان» بگیرید.</div></div>`;
+  h+=`<div class="hint" style="margin-top:12px">برای باز کردن یک دفتر روی کارتش بزنید. برای تغییر نام، رمز، پاک کردن یا حذف، دکمهٔ «ویرایش دفتر» زیر همان کارت است.</div>`;
   return h;
 }
-function renBook(){
-  sheet('تغییر نام دفتر',`<div class="f"><input name="name" value="${esc(cur().name)}"></div>`,fd=>{const n=(fd.get('name')||'').trim();if(!n)return 'نام را بنویسید';cur().name=n;save();});
+const bookById=id=>R.books.find(x=>x.id===id);
+function bookMenu(id){
+  const b=bookById(id);if(!b)return;const el=$('#sheet');
+  el.innerHTML=`<div class="sh"><div class="shh"><b>ویرایش دفتر «${esc(b.name)}»</b><button type="button" class="x" data-a="close">بستن</button></div><div class="row" style="flex-direction:column;margin-top:0"><button type="button" class="btn" data-a="renBook" data-id="${b.id}">تغییر نام</button><button type="button" class="btn" data-a="pinBook" data-id="${b.id}">${b.pin?'تغییر / حذف رمز':'گذاشتن رمز'}</button><button type="button" class="btn dng" data-a="resetBook" data-id="${b.id}">پاک کردن همهٔ اطلاعات این دفتر</button><button type="button" class="btn dng" data-a="delBook" data-id="${b.id}">حذف کامل دفتر</button></div><p class="mut" style="margin-top:12px">هر دفتر اطلاعات جداگانه دارد و پاک کردن یکی روی بقیه اثری ندارد. رمز فقط جلوی باز کردن اتفاقی را می‌گیرد. پیش از پاک کردن، «خروجی پشتیبان» بگیرید.</p></div>`;
+  el.classList.add('on');
 }
-function pinBook(){
+function renBook(id){
+  const b=bookById(id);
+  sheet('تغییر نام دفتر',`<div class="f"><input name="name" value="${esc(b.name)}"></div>`,fd=>{const n=(fd.get('name')||'').trim();if(!n)return 'نام را بنویسید';b.name=n;save();});
+}
+function pinBook(id){
+  const b=bookById(id);
   sheet('رمز دفتر',`<div class="f"><label class="l">رمز جدید (حداقل ۴ رقم). خالی بگذارید تا رمز برداشته شود.</label><input name="pin" type="password" inputmode="numeric" autocomplete="off"></div>`,fd=>{
     const p=en(fd.get('pin')||'').replace(/\D/g,'');
-    if(!p)delete cur().pin;else if(p.length<4)return 'حداقل ۴ رقم';else cur().pin=p;
+    if(!p)delete b.pin;else if(p.length<4)return 'حداقل ۴ رقم';else b.pin=p;
     save();
   });
 }
-function wordCheck(msg){return confirm(msg)&&(prompt('برای تأیید، کلمهٔ «پاک» را بنویسید')||'').trim()==='پاک';}
-function resetBook(){
-  const b=cur();if(!wordCheck('همهٔ اطلاعات دفتر «'+b.name+'» پاک شود؟ این کار برگشت ندارد.'))return;
-  b.d=freshD(b.type);S=b.d;save();route={v:homeOf()};history.pushState({r:route},'');render();toast('دفتر خالی شد');
-  if(b.type==='shop')setTimeout(fSetup,80);else if(b.type==='trip')setTimeout(fPeople,80);
+function resetBook(id){
+  const b=bookById(id);
+  askWord('همهٔ اطلاعات دفتر «'+b.name+'» پاک شود؟ این کار برگشت ندارد.',()=>{
+    b.d=freshD(b.type);const isCur=b.id===R.cur;if(isCur){S=b.d;route={v:homeOf()};history.pushState({r:route},'');}
+    save();toast('اطلاعات دفتر پاک شد');
+    if(isCur){if(b.type==='shop')setTimeout(fSetup,120);else if(b.type==='trip')setTimeout(fPeople,120);}
+  });
 }
-function delBook(){
-  if(R.books.length<2)return toast('آخرین دفتر را نمی‌شود حذف کرد');
-  const b=cur();if(!wordCheck('دفتر «'+b.name+'» برای همیشه حذف شود؟'))return;
-  R.books=R.books.filter(x=>x.id!==b.id);R.cur=R.books[0].id;S=cur().d;save();
-  route={v:homeOf()};history.pushState({r:route},'');render();toast('دفتر حذف شد');
+function delBook(id){
+  const b=bookById(id);
+  if(R.books.length<2)return toast('آخرین دفتر را نمی‌شود حذف کرد؛ اول یک دفتر دیگر بسازید');
+  askWord('دفتر «'+b.name+'» برای همیشه حذف شود؟',()=>{
+    R.books=R.books.filter(x=>x.id!==id);
+    if(R.cur===id){R.cur=R.books[0].id;S=cur().d;route={v:homeOf()};history.pushState({r:route},'');}
+    save();toast('دفتر حذف شد');
+  });
 }
 
 /* ======================= سفر / دنگ ======================= */
@@ -737,6 +779,7 @@ function vTExp(){
   h+=ps.length&&!S.closed?tiles([['plus','plus','g','خرج جدید'],['tpayq','swap','st','ثبت پرداخت'],['addPeople','users','ok','نفرات']]).replace('data-a="plus"','data-a="plus"'):'';
   if(!ps.length)h+=`<div class="row"><button class="btn pri" data-a="addPeople">افزودن نفرات</button></div>`;
   const list=live(S.exp).sort(byDate);
+  if(list.length)h+=`<div class="hint">برای ویرایش یا حذف، روی هر مورد بزنید</div>`;
   h+=list.length?list.map(e=>{
     if(e.t==='pay')return `<div class="pan edge g tap" data-a="edExp" data-id="${e.id}"><div class="li">${avi('swap','g')}<div class="t"><b>پرداخت: ${esc(pName(e.from))} به ${esc(pName(e.to))}</b><div class="mut">${jstr(e.d)}</div></div><div class="a">${fmt(e.a)}</div></div></div>`;
     const all=(e.sh||[]).length===ps.length;
@@ -758,8 +801,8 @@ function vTSet(){
 }
 function closeTrip(){
   const t=tripCalc();
-  if(t.tr.length&&!confirm('هنوز تسویه کامل نشده است. با این حال سفر بسته شود؟'))return;
-  S.closed=true;S.closedAt=today();save();logit('بستن سفر');render();
+  const doIt=()=>{S.closed=true;S.closedAt=today();save();logit('بستن سفر');render();};
+  if(t.tr.length)ask('هنوز تسویه کامل نشده است. با این حال سفر بسته شود؟',doIt);else doIt();
 }
 
 /* ======================= شخصی ======================= */
@@ -808,7 +851,7 @@ function fDebtPay(id){
     const a=num(fd,'a');if(!a)return 'مبلغ را وارد کنید';
     const d=readJ(fd,'d')||today(),pay={id:uid(),a,d};
     if(fd.get('mk')){const tx={id:uid(),t:lent?'in':'out',a,cat:lent?'سایر':'قسط و بدهی',note:x.name,d};put('tx',tx);pay.txid=tx.id;}
-    x.pays=(x.pays||[]).concat(pay);put('debts',x);logit((lent?'دریافت ':'پرداخت ')+fmt(a)+' برای «'+x.name+'»');
+    x.pays=(x.pays||[]).concat(pay);put('debts',x);logit((lent?'دریافت ':'پرداخت ')+fmt(a)+' برای «'+x.name+'»');lastPut={col:'debtpay',id:x.id};
   });
 }
 function vPHome(){
@@ -833,7 +876,7 @@ function vPTx(){
   const f=route.f||'all';
   const list=live(S.tx).filter(t=>f==='all'||t.t===f).sort(byDate).slice(0,250);
   const chip=(k,l)=>`<a class="${f===k?'on':''}" data-a="filt" data-f="${k}">${l}</a>`;
-  return `<div class="chips">${chip('all','همه')}${chip('in','درآمد')}${chip('out','خرج')}</div>`+(list.length?list.map(t=>`<div class="pan edge ${t.t==='in'?'o':'d'} tap" data-a="edPTx" data-id="${t.id}"><div class="li">${avi(t.t==="in"?"down":"up",t.t==="in"?"ok":"d")}<div class="t"><b>${esc(t.note||t.cat)}</b><div class="mut">${jstr(t.d)} · ${esc(t.cat)}</div></div><div class="a ${t.t==='in'?'okc':'deb'}">${t.t==='in'?'+':'−'}${fmt(t.a)}</div></div></div>`).join(''):'<div class="empty">چیزی ثبت نشده. با دکمهٔ + شروع کنید.</div>');
+  return `<div class="chips">${chip('all','همه')}${chip('in','درآمد')}${chip('out','خرج')}</div><div class="hint">برای ویرایش یا حذف، روی هر مورد بزنید</div>`+(list.length?list.map(t=>`<div class="pan edge ${t.t==='in'?'o':'d'} tap" data-a="edPTx" data-id="${t.id}"><div class="li">${avi(t.t==="in"?"down":"up",t.t==="in"?"ok":"d")}<div class="t"><b>${esc(t.note||t.cat)}</b><div class="mut">${jstr(t.d)} · ${esc(t.cat)}</div></div><div class="a ${t.t==='in'?'okc':'deb'}">${t.t==='in'?'+':'−'}${fmt(t.a)}</div></div></div>`).join(''):'<div class="empty">چیزی ثبت نشده. با دکمهٔ + شروع کنید.</div>');
 }
 function vPDebt(){
   const ds=live(S.debts);
@@ -856,7 +899,7 @@ function vPDebtD(){
 /* ======================= actions (دفترها / سفر / شخصی) ======================= */
 Object.assign(A,{
   crumb:d=>go(d.v,d.id?{id:d.id}:undefined),home:()=>go(homeOf()),tpayq:()=>fTPay(),
-  openBook:d=>switchTo(d.id),newBook:()=>{closeSheet();fBook();},renBook,pinBook,resetBook,delBook,
+  openBook:d=>switchTo(d.id),newBook:()=>{closeSheet();fBook();},renBook:d=>renBook(d.id),pinBook:d=>pinBook(d.id),resetBook:d=>resetBook(d.id),delBook:d=>delBook(d.id),bookMenu:d=>bookMenu(d.id),
   addPeople:()=>fPeople(),edPerson:d=>fPerson(S.people.find(x=>x.id===d.id)),
   edExp:d=>{const e=S.exp.find(x=>x.id===d.id);if(!e)return;if(S.closed)return toast('سفر بسته است');if(e.t==='pay')fTPay(null,null,null,e);else fExp(e);},
   tpay:d=>fTPay(d.from,d.to,+d.amt),newTPay:()=>fTPay(),closeTrip,
@@ -864,10 +907,10 @@ Object.assign(A,{
   newPIn:()=>{closeSheet();fPTx('in');},newPOut:()=>{closeSheet();fPTx('out');},newDebt:()=>{closeSheet();fDebt();},
   edPTx:d=>fPTx(null,S.tx.find(x=>x.id===d.id)),
   pdebtd:d=>go('pdebtd',{id:d.id}),editDebt:d=>fDebt(S.debts.find(x=>x.id===d.id)),debtPay:d=>fDebtPay(d.id),
-  delPay:d=>{const x=S.debts.find(q=>q.id===d.id),p=(x.pays||[]).find(q=>q.id===d.pid);if(!p||!confirm('این مورد حذف شود؟'))return;
-    x.pays=x.pays.filter(q=>q.id!==p.id);put('debts',x);
+  delPay:d=>{const x=S.debts.find(q=>q.id===d.id),p=(x.pays||[]).find(q=>q.id===d.pid);if(!p)return;
+    ask('این مورد حذف شود؟',()=>{x.pays=x.pays.filter(q=>q.id!==p.id);put('debts',x);
     if(p.txid){const t=S.tx.find(q=>q.id===p.txid);if(t){t.del=true;put('tx',t);}}
-    logit('حذف یک مورد از «'+x.name+'»');render();}
+    logit('حذف یک مورد از «'+x.name+'»');render();});}
 });
 
 /* ---------- start ---------- */
