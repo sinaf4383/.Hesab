@@ -260,7 +260,7 @@ function vCal(){
   const mark={};const mk=(ds,k)=>{(mark[ds]=mark[ds]||{})[k]=1;};
   live(S.appt||[]).forEach(a=>mk(a.d,'a'));live(S.chq||[]).filter(c=>c.st==='open').forEach(c=>mk(c.due,'c'));live(S.notes||[]).filter(n=>n.rem&&!n.done).forEach(n=>mk(n.rem.slice(0,10),'n'));live(S.pay||[]).filter(x=>x.due&&brest(x)>0).forEach(x=>mk(x.due,'c'));
   let h=`<div class="li" style="margin-bottom:10px"><button class="ib" style="background:var(--stbg);color:var(--st)" data-a="calNav" data-y="${nx[0]}" data-m="${nx[1]}" aria-label="ماه بعد">${ic('back').replace('<svg class="ic "','<svg class="ic " style="transform:rotate(180deg)"')}</button><div style="text-align:center"><b style="font-size:18px">${MONTHS[cm-1]} ${fa(cy)}</b></div><button class="ib" style="background:var(--stbg);color:var(--st)" data-a="calNav" data-y="${pm[0]}" data-m="${pm[1]}" aria-label="ماه قبل">${ic('back')}</button></div>`;
-  h+=`<div class="cgrid">${['ش','ی','د','س','چ','پ','ج'].map((n,i)=>`<div class="cw ${i===6?'f':''}">${n}</div>`).join('')}`;
+  h+=`<div class="cgrid">${DN.map((n,i)=>`<div class="cw ${i===6?'f':''}">${n[0]==='ش'&&n.length>4?'ش':n.slice(0,1)}</div>`).join('')}`;
   for(let i=0;i<off;i++)h+='<div></div>';
   for(let d=1;d<=len;d++){const ds=jiso(cy,cm,d),info=dayInfo(ds),m=mark[ds]||{};
     h+=`<div class="cd ${ds===td?'t':''} ${info.off?'h':''}" data-a="day" data-id="${ds}">${fa(d)}<span class="dots">${info.occ.length?'<i class="g"></i>':''}${m.a?'<i class="b"></i>':''}${m.c?'<i class="r"></i>':''}${m.n?'<i class="p"></i>':''}</span></div>`;}
@@ -508,6 +508,7 @@ window.kargahExtra=function(){
   window.XTAB={more:'more',chq:'more',notes:'more',stock:'more',notif:'more',acct:'more',bdebt:'more',bdebtd:'more',chqd:'more',item:'more',buylist:'more',srep:'more',cal:'cal',day:'cal'};
   const bd=(id)=>S.chq&&S.chq.find(x=>x.id===id);
   Object.assign(A,{
+    more:()=>go('more'),notif:()=>go('notif'),
     xf:d=>{route.f=d.f;render();},xgo:d=>{closeSheet();go(d.v,d.id?{id:d.id}:undefined);},
     day:d=>go('day',{id:d.id}),calNav:d=>{route.ym=[+d.y,+d.m];render();},
     newAppt:d=>{closeSheet();fAppt(null,d&&d.d);},editAppt:d=>fAppt(S.appt.find(x=>x.id===d.id)),
@@ -531,7 +532,6 @@ window.kargahExtra=function(){
     if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data&&e.data.go){const g=e.data.go;route={v:g.v,id:g.id};history.pushState({r:route},'');render();}});}
   const st=document.createElement('style');st.textContent=`.cgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.cw{text-align:center;font-size:12px;color:var(--mut);font-weight:700}.cw.f{color:var(--debt)}.cd{aspect-ratio:1/1.08;border-radius:12px;background:var(--card);border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;cursor:pointer;gap:2px}.cd.t{border:2px solid var(--st);background:var(--stbg)}.cd.h{background:var(--dbg);color:var(--debt)}.dots{display:flex;gap:2px;height:6px}.dots i,.dot{display:inline-block;width:6px;height:6px;border-radius:50%}.dots i.g,.dot.g{background:var(--gold)}.dots i.b,.dot.b{background:var(--st)}.dots i.r,.dot.r{background:var(--debt)}.dots i.p,.dot.p{background:#8a5cc7}.bell{position:relative}.bdg{position:absolute;top:-4px;right:-4px;background:var(--gold);color:#2b2108;font-size:11px;font-weight:800;min-width:18px;height:18px;line-height:18px;border-radius:9px;text-align:center;padding:0 4px}`;document.head.appendChild(st);
 };
-window.XT={dayInfo,buildRem,buildIcs,stockCalc,fChq,fNote,fAppt,fSItem,fMove,fBulk,chqDone,chqReopen,buyText,jiso,addD};
 window.xBoot=function(){
   try{const h=location.hash;if(h.startsWith('#go=')){const g=JSON.parse(decodeURIComponent(h.slice(4)));history.replaceState(null,'',location.pathname);route={v:g.v,id:g.id};render();}}catch(e){}
   xCheck();
