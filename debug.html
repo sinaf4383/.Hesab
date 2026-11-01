@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>عیب‌یابی حساب کارگاه</title>
+<style>body{font:15px/1.9 Tahoma,sans-serif;margin:0;padding:14px;background:#EEF1F4;color:#16202A}h1{font-size:18px;margin:4px 0 8px}.b{display:block;width:100%;margin:8px 0;padding:13px;border:0;border-radius:12px;background:#2B4F7A;color:#fff;font:inherit;font-weight:bold}.b.g{background:#E0A93B;color:#2b2108}.c{background:#fff;border-radius:12px;padding:10px 12px;margin:10px 0;word-break:break-all}pre{direction:ltr;text-align:left;white-space:pre-wrap;font-size:12px;margin:4px 0}.ok{color:#1E8A5A}.bad{color:#C23A2B}a{color:#2B4F7A;font-weight:bold}</style></head><body>
+<h1>عیب‌یابی حساب کارگاه</h1>
+<div class="c" id="info">در حال بررسی…</div>
+<button class="b" id="bk">۱) ذخیرهٔ پشتیبان از همهٔ اطلاعات (فایل)</button>
+<button class="b" id="ft">۲) بررسی فایل‌های برنامه</button><div class="c" id="ftout">—</div>
+<button class="b" id="ifr">۳) اجرای آزمایشی برنامه و نمایش خطا</button><div class="c" id="ifout">—</div>
+<button class="b g" id="rs">۴) پاک کردن حافظهٔ موقت برنامه (اطلاعات شما پاک نمی‌شود)</button>
+<p><a href="index.html">بازگشت به برنامه</a> &nbsp;|&nbsp; <a href="index.html?safe=1">حالت امن</a></p>
+<script>
+var $=function(i){return document.getElementById(i)};
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+var COLS={shop:['cust','ord','tx','pay','chq','notes','appt','sitems','smov'],solo:['cust','ord','tx','pay','chq','notes','appt','sitems','smov'],trip:['people','exp'],personal:['tx','debts']};
+function root(){try{return JSON.parse(localStorage.getItem('kargah.v2'))}catch(e){return null}}
+function info(){
+  var h='',r=root(),raw=localStorage.getItem('kargah.v2'),old=localStorage.getItem('kargah.v1');
+  h+='جاوااسکریپت کار می‌کند: <b class="ok">بله</b><br>';
+  h+='اطلاعات ذخیره‌شده: '+(raw?'<b class="ok">پیدا شد ('+Math.round(raw.length/1024)+' کیلوبایت)</b>':(old?'نسخهٔ قدیمی پیدا شد':'<b class="bad">چیزی پیدا نشد</b>'))+'<br>';
+  if(r&&r.books){h+='تعداد دفترها: '+r.books.length+'<br>';r.books.forEach(function(b){var n=0;(COLS[b.type]||[]).forEach(function(c){n+=((b.d&&b.d[c])||[]).filter(function(x){return !x.del}).length});h+='• '+esc(b.name)+' ('+esc(b.type)+') — '+n+' مورد'+(b.pin?' — رمزدار':'')+'<br>'});}
+  h+='سرویس‌ورکر: ';
+  if(navigator.serviceWorker){navigator.serviceWorker.getRegistrations().then(function(rs){$('info').innerHTML=h+(rs.length?rs.length+' مورد ثبت شده':'ثبت نشده')}).catch(function(){$('info').innerHTML=h+'نامشخص'});}else{$('info').innerHTML=h+'پشتیبانی نمی‌شود';}
+}
+info();
+function dl(name,text){var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'application/json'}));a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){a.remove()},1500)}
+$('bk').onclick=function(){
+  var r=root();if(!r||!r.books){alert('اطلاعاتی پیدا نشد');return}
+  dl('kargah-ALL-raw-'+Date.now()+'.json',JSON.stringify(r));
+  r.books.forEach(function(b,i){setTimeout(function(){
+    var d={app:'kargah',v:2,bid:b.id,type:b.type,name:b.name,at:Date.now(),set:{},log:(b.d&&b.d.log)||[]};
+    if(b.d&&b.d.set&&(b.type==='shop'||b.type==='solo')){d.set={nameA:b.d.set.nameA,nameB:b.d.set.nameB,share:b.d.set.share,shop:b.d.set.shop,phone:b.d.set.phone}}
+    (COLS[b.type]||[]).forEach(function(c){d[c]=(b.d&&b.d[c])||[]});
+    if(b.type==='trip')d.closed=!!(b.d&&b.d.closed);
+    dl('kargah-'+b.type+'-'+(i+1)+'.json',JSON.stringify(d));
+  },700*(i+1));});
+  alert('فایل‌ها دانلود شد. اگر مرورگر اجازهٔ چند دانلود پرسید، تأیید کن.');
+};
+$('ft').onclick=function(){
+  var out=$('ftout');out.innerHTML='در حال بررسی…';var files=['index.html','extra.js','ideas.js','sw.js','manifest.json'],res=[];
+  var next=function(i){
+    if(i>=files.length){out.innerHTML=res.join('');return}
+    var u=files[i];
+    fetch(u+'?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.text().then(function(t){return{r:r,t:t}})}).then(function(o){
+      var line='<b>'+u+'</b>: وضعیت '+o.r.status+'، '+Math.round(o.t.length/1024)+' کیلوبایت';
+      var syn='';
+      try{
+        if(/\.js$/.test(u)){new Function(o.t);syn=' — <span class="ok">کد سالم</span>'}
+        else if(u==='index.html'){
+          var m=o.t.match(/<script>\n'use strict';[\s\S]*?<\/script>/);
+          if(!m){syn=' — <span class="bad">اسکریپت اصلی پیدا نشد (فایل ناقص یا قدیمی؟)</span>'}
+          else{new Function(m[0].replace(/^<script>\n/,'').replace(/<\/script>$/,''));syn=' — <span class="ok">کد اصلی سالم</span>'+(o.t.indexOf('در حال بارگذاری')>-1?' (نسخهٔ جدید)':' (نسخهٔ قدیمی)');}
+        }
+      }catch(e){syn=' — <span class="bad">خطای کد: '+esc(e.message)+'</span>'}
+      if(o.t.length<300||/<html/i.test(o.t.slice(0,200))&&/\.js$/.test(u))syn=' — <span class="bad">محتوای نامعتبر (احتمالاً فایل آپلود نشده)</span><pre>'+esc(o.t.slice(0,120))+'</pre>';
+      res.push(line+syn+'<br>');next(i+1);
+    }).catch(function(e){res.push('<b>'+u+'</b>: <span class="bad">دریافت نشد ('+esc(e.message)+')</span><br>');next(i+1)});
+  };next(0);
+};
+$('ifr').onclick=function(){
+  var out=$('ifout');out.innerHTML='در حال اجرا (۸ ثانیه)…';
+  var f=document.createElement('iframe');f.style.cssText='width:1px;height:1px;border:0;position:absolute;left:-9999px';f.src='index.html?dbg='+Date.now();document.body.appendChild(f);
+  setTimeout(function(){
+    try{var w=f.contentWindow,a=w.document.getElementById('app'),t=(a?a.innerText:'').replace(/\s+/g,' ').slice(0,300);
+      out.innerHTML='ready='+w.__mainReady+' | extra='+(typeof w.kargahExtra)+' | ideas='+(w.KIDEAS?w.KIDEAS.length:'none')+'<pre>'+esc(t)+'</pre>';
+    }catch(e){out.innerHTML='<span class="bad">'+esc(e.message)+'</span>'}
+    f.remove();
+  },8000);
+};
+$('rs').onclick=function(){
+  var p=[];
+  if(navigator.serviceWorker)p.push(navigator.serviceWorker.getRegistrations().then(function(rs){return Promise.all(rs.map(function(r){return r.unregister()}))}));
+  if(window.caches)p.push(caches.keys().then(function(ks){return Promise.all(ks.map(function(k){return caches.delete(k)}))}));
+  Promise.all(p).then(function(){alert('حافظهٔ موقت پاک شد. حالا برنامه دوباره باز می‌شود.');location.href='index.html?fresh='+Date.now()}).catch(function(e){alert('خطا: '+e.message)});
+};
+</script></body></html>
