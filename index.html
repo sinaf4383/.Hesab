@@ -140,6 +140,7 @@ nav a.on .ic{background:var(--stbg)}
 <script>
 window.__showErr=function(m){var a=document.getElementById('app');if(!a||a.querySelector('header'))return;a.innerHTML='<div style="padding:18px;font:14px Tahoma,sans-serif;direction:rtl;line-height:1.9"><b>برنامه باز نشد.</b><br>این متن را به سازنده بفرست:<div style="direction:ltr;text-align:left;font:12px monospace;background:#fff;border:1px solid #ccc;padding:8px;margin-top:8px;word-break:break-all">'+String(m).replace(/</g,'&lt;')+'</div></div>';};
 window.addEventListener('error',function(e){window.__showErr((e.message||'error')+' @ '+(e.filename||'').split('/').pop()+':'+(e.lineno||''));});
+setTimeout(function(){var a=document.getElementById('app');if(a&&!window.__mainReady&&!a.querySelector('header')){a.innerHTML='<div style="padding:18px;font:14px Tahoma,sans-serif;direction:rtl;line-height:1.9"><b>برنامه هنوز بالا نیامده است.</b><br>اطلاعات شما روی گوشی سالم است.<br><a href="debug.html" style="color:#2B4F7A;font-weight:bold">ابزار عیب‌یابی و ذخیرهٔ پشتیبان ←</a><br><a href="index.html?safe=1" style="color:#2B4F7A">باز کردن در حالت امن ←</a><div style="direction:ltr;text-align:left;font:12px monospace;margin-top:8px">ready='+window.__mainReady+' extra='+typeof window.kargahExtra+'</div></div>';}},6000);
 </script>
 <script src="ideas.js" defer></script>
 <script src="extra.js" defer></script>
@@ -606,7 +607,7 @@ function vReports(){
 function vSet(){
   const s0=S.set,t=btype(),shopish=t==='shop'||t==='solo';
   const logs=S.log.slice().sort((x,y)=>y.ts-x.ts).slice(0,60);
-  let h=`<div class="pan"><div class="li" style="justify-content:flex-start"><img src="icon-192.png" alt="" width="54" height="54" style="border-radius:14px"><div><b>حساب کارگاه</b><div class="mut">ساخته‌شده توسط ${CREDIT}</div><div class="mut">نسخهٔ ۹</div></div></div></div>`;
+  let h=`<div class="pan"><div class="li" style="justify-content:flex-start"><img src="icon-192.png" alt="" width="54" height="54" style="border-radius:14px"><div><b>حساب کارگاه</b><div class="mut">ساخته‌شده توسط ${CREDIT}</div><div class="mut">نسخهٔ ۱۰</div></div></div></div>`;
   if(t==='shop')h+=`<div class="pan"><div class="kv"><span>شریک اول</span><b>${esc(s0.nameA)}</b></div><div class="kv"><span>شریک دوم</span><b>${esc(s0.nameB)}</b></div><div class="kv"><span>این گوشی</span><b>${esc(nm(s0.who))}</b></div><div class="row"><button class="btn sm" data-a="setup">تغییر نام‌ها / این گوشی</button></div></div>`;
   if(shopish)h+=`<div class="pan"><form id="sf"><div class="f"><label class="l">نام روی فاکتور</label><input name="shop" value="${esc(s0.shop)}" placeholder="${esc(cur().name)}"></div><div class="f"><label class="l">تلفن (روی فاکتور)</label><input name="phone" inputmode="tel" value="${esc(s0.phone)}"></div>${t==='shop'?`<div class="f"><label class="l">سهم ${esc(s0.nameA)} از شراکت (درصد)</label><input name="share" inputmode="numeric" value="${fa(s0.share)}"></div>`:''}<button class="btn pri" style="width:100%">ذخیرهٔ تنظیمات</button></form></div>`;
   h+=`<div class="pan"><div class="li"><span>دفتر فعلی: <b>${esc(cur().name)}</b></span><button class="btn sm" data-a="go" data-v="books">دفترها</button></div><div class="row"><button class="btn sm" data-a="bookMenu" data-id="${cur().id}">ویرایش دفتر</button></div></div>`;
@@ -1094,7 +1095,4 @@ function vBDebt(){
   const all=live(S.pay||[]),open=all.filter(x=>brest(x)>0).sort((a,b)=>(a.due||'9')<(b.due||'9')?-1:1),done=all.filter(x=>brest(x)<=0);
   const owed=open.reduce((a,x)=>a+brest(x),0);
   let h=`<div class="plate"><div class="big">جمع بدهی‌های باز: ${words(owed)}</div><small>${fa(open.length)} مورد باز</small></div>`;
-  const row=x=>{const r=brest(x),lb=x.due&&r>0?dueLabel(x.due):['',''];return `<div class="pan edge ${r>0?(lb[1]||'d'):'o'} tap" data-a="bdebtd" data-id="${x.id}"><div class="li">${avi('receipt',r>0?'d':'ok')}<div class="t"><b>${esc(x.name)}</b><div class="mut">${esc(x.cat)}${x.due&&r>0?' · '+lb[0]:''}${r<=0?' · تسویه شد':''}</div></div><div class="a ${r>0?'deb':'okc'}">${r>0?money(r):money(x.total)}</div></div></div>`;};
-  h+=open.length?open.map(row).join(''):'<div class="empty">بدهی بازی ندارید</div>';
-  if(done.length)h+=`<h2>تسویه‌شده‌ها</h2>`+done.map(row).join('');
-  return h+`<div class="row"><button class="btn pri" data-a="newBDebt">ثبت بدهی جدید</button></d
+  const row=x=>{const r=brest(x),lb=x.due&&r>0?
